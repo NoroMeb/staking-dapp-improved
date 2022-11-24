@@ -1,14 +1,21 @@
 dependecies:
   - OpenZeppelin/openzeppelin-contracts@4.8.0
-
+  - smartcontractkit/chainlink-brownie-contracts@0.2.1
+  - OpenZeppelin/openzeppelin-contracts-upgradeable@4.8.0
 compiler:
   solc:
     remappings:
       - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@4.8.0"
+      - "@chainlink=smartcontractkit/chainlink-brownie-contracts@0.2.1"
+      - "@openzeppelin-upgradeable=OpenZeppelin/openzeppelin-contracts-upgradeable@4.8.0"
+
 dotenv: .env
 networks:
+  default: development
   goerli:
     priority_fee: null
+    goat_token: "0x05486A4280ea750FE49832B7224fbef8c835870B"
+    link_token: "0x326C977E6efc84E512bB9C30f76E30c160eD06FB"
 
 wallets:
   from_key: ${PRIVATE_KEY}

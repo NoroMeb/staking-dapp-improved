@@ -1,4 +1,5 @@
 from scripts.utils import get_account
+from scripts.deploy import deploy_reward_token
 from brownie import RewardToken
 
 
@@ -7,7 +8,7 @@ def test_reward_token():
     account = get_account()
 
     # act
-    reward_token = RewardToken.deploy({"from": account})
+    reward_token = deploy_reward_token()
 
     # assert
     assert (
