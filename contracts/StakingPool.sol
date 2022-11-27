@@ -4,58 +4,82 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "./RewardToken.sol";
 
 contract StakingPool is OwnableUpgradeable {
-    uint256 private constant lockTime = 20 seconds;
+    uint256 public constant lockTime = 20;
 
-    address[] public allowedTokens;
     mapping(address => bool) public isAllowed;
-    mapping(address => mapping(address => uint256)) public stakingBalance;
-    mapping(address => mapping(address => uint256)) public timeLock;
 
-    IERC20 public immutable rewardsToken;
+    uint256 private rewardTokensPerBlock;
+    uint256 private constant STAKER_SHARE_PRECISION = 1e12;
+    RewardToken public rewardToken;
+    uint256 public totalTokensStaked;
 
-    uint256 public duration;
-    uint256 public finishAt;
-    uint256 public updatedAt;
-    uint256 public rewardRate;
-    uint256 public rewardPerTokenStored;
-    mapping(address => uint256) public userRewardPerTokenPaid;
-    mapping(address => uint256) public rewards;
+    struct Staker {
+        uint256 totalAmount;
+        uint256 rewards;
+        uint256 lastRewardedBlock;
+    }
 
-    uint256 public totalSupply;
-    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256))
+        public stakingBalancePerToken;
+    mapping(address => mapping(address => uint256)) public expire;
+    mapping(address => Staker) public stakers;
+
+    address[] public stakersArray;
 
     function initialize(
         address[] calldata _allowedTokens,
-        address _rewardsToken
+        address _rewardTokenAddress,
+        uint256 _rewardTokensPerBlock
     ) external initializer {
         __Ownable_init();
         for (uint256 i = 0; i < _allowedTokens.length; i++) {
             isAllowed[_allowedTokens[i]] = true;
         }
 
-        rewardsToken = IERC20(_rewardsToken);
+        rewardToken = RewardToken(_rewardTokenAddress);
+        rewardTokensPerBlock = _rewardTokensPerBlock;
     }
 
     function stake(address _token, uint256 _amount) external {
-        require(_amount > 0, "Invalid amount");
-        require(isAllowed[_token] == true, "Token in not allowed yet");
-        uint256 balance = stakingBalance[_token][msg.sender];
-        IERC20(_token).transferFrom(msg.sender, address(this), _amount);
-        stakingBalance[_token][msg.sender] = _amount;
-        uint256 expire = block.timestamp + lockTime;
-        if (balance == 0) {
-            timeLock[_token][msg.sender] = expire;
+        require(_amount > 0, "Insufficient amount");
+        require(isAllowed[_token], "Token not allowed");
+        Staker memory staker;
+        staker.totalAmount = staker.totalAmount + _amount;
+        staker.lastRewardedBlock = block.number;
+        stakers[msg.sender] = staker;
+        totalTokensStaked = totalTokensStaked + _amount;
+        stakingBalancePerToken[_token][msg.sender] =
+            stakingBalancePerToken[_token][msg.sender] +
+            _amount;
+        uint256 expired = block.number + lockTime;
+        if (stakingBalancePerToken[_token][msg.sender] == _amount) {
+            // stakes this token for the first time
+            expire[_token][msg.sender] = expired;
         }
+        if (staker.totalAmount == _amount) {
+            // stakes for the first time
+            stakersArray.push(msg.sender);
+        }
+        updateStakersRewards();
+        IERC20(_token).transferFrom(msg.sender, address(this), _amount);
     }
 
     function withdraw(address _token) external {
-        require(block.timestamp >= timeLock[_token][msg.sender], "Not yet");
-        uint256 amount = stakingBalance[_token][msg.sender];
-        stakingBalance[_token][msg.sender] = 0;
+        require(block.number >= expire[_token][msg.sender]);
+        uint256 amount = stakingBalancePerToken[_token][msg.sender];
+        updateStakersRewards();
+        claimReward(msg.sender);
+
         IERC20(_token).transfer(msg.sender, amount);
-        timeLock[_token][msg.sender] = 0;
+        expire[_token][msg.sender] = 0;
+        Staker memory staker = stakers[msg.sender];
+        totalTokensStaked = totalTokensStaked - amount;
+        staker.totalAmount = staker.totalAmount - amount;
+        stakingBalancePerToken[_token][msg.sender] = 0;
+        stakers[msg.sender] = staker; // save
     }
 
     function addAllowedToken(address _token) external onlyOwner {
@@ -70,9 +94,28 @@ contract StakingPool is OwnableUpgradeable {
         return lockTime;
     }
 
-    function setRewardDuration(uint256 _duration) external {}
+    function claimReward(address _account) public {
+        updateStakersRewards();
+        Staker storage staker = stakers[_account];
+        uint256 rewardsToClaim = staker.rewards;
+        staker.rewards = 0;
+        rewardToken.mint(_account, rewardsToClaim);
+    }
 
-    function notifyRewardAmount(uint256 _amount) external {}
-
-    function claimReward() external {}
+    function updateStakersRewards() private {
+        for (uint256 i = 0; i < stakersArray.length; i++) {
+            address stakerAddress = stakersArray[i];
+            Staker memory staker = stakers[stakerAddress];
+            uint256 blocksSinceLastReward = block.number -
+                staker.lastRewardedBlock;
+            uint256 stakerShare = (staker.totalAmount *
+                STAKER_SHARE_PRECISION) / totalTokensStaked;
+            uint256 rewards = (blocksSinceLastReward *
+                rewardTokensPerBlock *
+                stakerShare) / STAKER_SHARE_PRECISION;
+            staker.lastRewardedBlock = block.number;
+            staker.rewards = staker.rewards + rewards;
+            stakers[stakerAddress] = staker;
+        }
+    }
 }

@@ -5,34 +5,50 @@ from brownie import (
     ProxyAdmin,
     TransparentUpgradeableProxy,
     Contract,
+    network,
+    config,
 )
+
+REWARDS_PER_BLOCK = 10
 
 
 def main():
+    deploy_reward_token_and_staking_pool()
+
+
+def deploy_reward_token_and_staking_pool():
     account = get_account()
-    staking_pool = StakingPool.deploy({"from": account})
     goat_token = get_contract("goat_token")
     link_token = get_contract("link_token")
-
     allowed_tokens = [goat_token.address, link_token.address]
 
-    initalizer = encode_function_data(staking_pool.initialize, allowed_tokens)
-    reward_token = deploy_reward_token()
-    proxy_admin = ProxyAdmin.deploy({"from": account})
+    reward_token = RewardToken.deploy(
+        {"from": account},
+        publish_source=config["networks"][network.show_active()]["verify"],
+    )
+    staking_pool = StakingPool.deploy(
+        {"from": account},
+        publish_source=config["networks"][network.show_active()]["verify"],
+    )
+    initalizer = encode_function_data(
+        staking_pool.initialize, allowed_tokens, reward_token.address, REWARDS_PER_BLOCK
+    )
+    proxy_admin = ProxyAdmin.deploy(
+        {"from": account},
+        publish_source=config["networks"][network.show_active()]["verify"],
+    )
     proxy = TransparentUpgradeableProxy.deploy(
         staking_pool.address,
         proxy_admin,
         initalizer,
         {"from": account},
+        publish_source=config["networks"][network.show_active()]["verify"],
     )
 
-    staking_pool = Contract.from_abi("StakingPool", proxy.address, StakingPool.abi)
-    reward_token.transfer(staking_pool, reward_token.balanceOf(account))
+    staking_pool_proxy = Contract.from_abi(
+        "StakingPool", proxy.address, StakingPool.abi
+    )
 
-    return staking_pool
+    reward_token.transferOwnership(staking_pool_proxy, {"from": account})
 
-
-def deploy_reward_token():
-    account = get_account()
-    reward_token = RewardToken.deploy({"from": account})
-    return reward_token
+    return (staking_pool_proxy, reward_token)
