@@ -80,5 +80,5 @@ def get_contract(contract_name):
 
 def deploy_mocks():
     account = get_account()
-    goat_token = GoatTokenMock.deploy({"from": account})
+    goat_token = GoatTokenMock.deploy(get_account(index=2), {"from": account})
     link_token = LinkTokenMock.deploy({"from": account})

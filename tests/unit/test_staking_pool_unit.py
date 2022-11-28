@@ -24,8 +24,8 @@ def test_initialize():
 def test_withdraw(amount_staked):
     # arrange
     account = get_account()
+    account_2 = get_account(2)
     staking_pool, reward_token = test_stake(amount_staked)
-    account = get_account()
     token = get_contract("goat_token")
     lock_time = staking_pool.getLockTime()
 
@@ -36,44 +36,60 @@ def test_withdraw(amount_staked):
     # act
     chain.mine(20)
     staking_pool.withdraw(token, {"from": account})
+    staking_pool.withdraw(token, {"from": account_2})
 
     # assert
 
     assert token.balanceOf(staking_pool) == 0
     assert staking_pool.stakingBalancePerToken(token, account) == 0
+    assert staking_pool.stakingBalancePerToken(token, account_2) == 0
     assert staking_pool.expire(token, account) == 0
+    assert staking_pool.expire(token, account_2) == 0
     assert staking_pool.stakers(account) == (
         0,
         0,
         chain[-1].number,
     )
+    assert staking_pool.stakers(account_2) == (
+        0,
+        0,
+        chain[-1].number,
+    )
 
-    assert reward_token.balanceOf(account) == 220
-    # 200 of blocks mained in line 38 + 30 of blocks mined with other transactions
+    assert reward_token.balanceOf(account) == Web3.toWei(120, "ether")
+    assert reward_token.balanceOf(account_2) == Web3.toWei(120, "ether")
 
 
 def test_stake(amount_staked):
     # arrange
     account = get_account()
+    account_2 = get_account(index=2)
     staking_pool, reward_token = deploy_reward_token_and_staking_pool()
     token = get_contract("goat_token")
     # amount = Web3.toWei(100, "ether")
     token.approve(staking_pool, amount_staked, {"from": account})
+    token.approve(staking_pool, amount_staked, {"from": account_2})
     # act
+
     staking_pool.stake(token, amount_staked, {"from": account})
+
+    staking_pool.stake(token, amount_staked, {"from": account_2})
 
     # assert
 
-    assert token.balanceOf(staking_pool) == amount_staked
-    assert staking_pool.totalTokensStaked() == amount_staked
+    assert token.balanceOf(staking_pool) == amount_staked * 2
+    assert staking_pool.totalTokensStaked() == amount_staked * 2
     assert staking_pool.stakingBalancePerToken(token, account) == amount_staked
+    assert staking_pool.stakingBalancePerToken(token, account_2) == amount_staked
     assert (
         staking_pool.expire(token, account)
-        == chain[-1].number + staking_pool.lockTime()
+        == chain[-1].number
+        + staking_pool.lockTime()
+        - 1  # of the second stake transaction
     )
 
     assert staking_pool.stakersArray(0) == account.address
-    assert staking_pool.stakers(account) == (amount_staked, 0, chain[-1].number)
+    assert staking_pool.stakersArray(1) == account_2.address
 
     return staking_pool, reward_token
 
@@ -81,13 +97,17 @@ def test_stake(amount_staked):
 def test_claim_reward(amount_staked):
     # arrange
     account = get_account()
+    account_2 = get_account(index=2)
     staking_pool, reward_token = test_stake(amount_staked)
 
     # act
+
     staking_pool.claimReward(account, {"from": account})
+    staking_pool.claimReward(account_2, {"from": account})
 
     # assert
-    assert reward_token.balanceOf(account) == 10
+    assert reward_token.balanceOf(account) == Web3.toWei(15, "ether")
+    assert reward_token.balanceOf(account_2) == Web3.toWei(10, "ether")
 
 
 def test_add_allowed_token():

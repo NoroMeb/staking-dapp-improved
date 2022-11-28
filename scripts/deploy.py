@@ -8,8 +8,9 @@ from brownie import (
     network,
     config,
 )
+from web3 import Web3
 
-REWARDS_PER_BLOCK = 10
+REWARDS_PER_BLOCK = Web3.toWei(10, "ether")
 
 
 def main():

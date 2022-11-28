@@ -6,8 +6,12 @@ import "@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 
 contract GoatTokenMock is ERC20, ERC20Permit, ERC20Votes {
-    constructor() ERC20("GoatToken", "GOAT") ERC20Permit("GoatToken") {
-        _mint(msg.sender, 1000000 * 10**18);
+    constructor(address _second_account)
+        ERC20("GoatToken", "GOAT")
+        ERC20Permit("GoatToken")
+    {
+        _mint(msg.sender, 500000 * 10**18);
+        _mint(_second_account, 500000 * 10**18);
     }
 
     // The functions below are overrides required by Solidity.

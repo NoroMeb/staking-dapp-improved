@@ -12,11 +12,14 @@ compiler:
 dotenv: .env
 networks:
   default: development
+  development:
+    verify: false
   goerli:
-    priority_fee: 20 gwei
+    priority_fee: 100 gwei
     goat_token: "0x05486A4280ea750FE49832B7224fbef8c835870B"
     link_token: "0x326C977E6efc84E512bB9C30f76E30c160eD06FB"
     verify: true
 
 wallets:
   from_key: ${PRIVATE_KEY}
+  from_key_2: ${PRIVATE_KEY_2}

@@ -46,7 +46,9 @@ contract StakingPool is OwnableUpgradeable {
     function stake(address _token, uint256 _amount) external {
         require(_amount > 0, "Insufficient amount");
         require(isAllowed[_token], "Token not allowed");
-        Staker memory staker;
+        updateStakersRewards();
+        uint256 stakingBalance = stakingBalancePerToken[_token][msg.sender];
+        Staker memory staker = stakers[msg.sender];
         staker.totalAmount = staker.totalAmount + _amount;
         staker.lastRewardedBlock = block.number;
         stakers[msg.sender] = staker;
@@ -55,7 +57,7 @@ contract StakingPool is OwnableUpgradeable {
             stakingBalancePerToken[_token][msg.sender] +
             _amount;
         uint256 expired = block.number + lockTime;
-        if (stakingBalancePerToken[_token][msg.sender] == _amount) {
+        if (!(stakingBalancePerToken[_token][msg.sender] == 0)) {
             // stakes this token for the first time
             expire[_token][msg.sender] = expired;
         }
@@ -63,12 +65,11 @@ contract StakingPool is OwnableUpgradeable {
             // stakes for the first time
             stakersArray.push(msg.sender);
         }
-        updateStakersRewards();
         IERC20(_token).transferFrom(msg.sender, address(this), _amount);
     }
 
     function withdraw(address _token) external {
-        require(block.number >= expire[_token][msg.sender]);
+        require(block.number >= expire[_token][msg.sender], "Not yet");
         uint256 amount = stakingBalancePerToken[_token][msg.sender];
         updateStakersRewards();
         claimReward(msg.sender);
@@ -102,7 +103,7 @@ contract StakingPool is OwnableUpgradeable {
         rewardToken.mint(_account, rewardsToClaim);
     }
 
-    function updateStakersRewards() private {
+    function updateStakersRewards() public {
         for (uint256 i = 0; i < stakersArray.length; i++) {
             address stakerAddress = stakersArray[i];
             Staker memory staker = stakers[stakerAddress];
